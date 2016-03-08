@@ -213,20 +213,14 @@ def parse_imm_reg(text):
 
 def parse_dir_orig(text):
     split = split_on_spaces(text)
-    orig_token = Token(split[0])
-    orig_token.add_type(ORIG)
-    number_token = parse_number(split[1])
-    token = Token(None, (orig_token, number_token))
+    token = parse_number(split[1])
     token.add_type(DIR_ORIG)
     return token
 
 
 def parse_dir_word(text):
     split = split_on_spaces(text)
-    word_token = Token(split[0])
-    word_token.add_type(WORD)
-    identifier_token = parse_identifier(split[1])
-    token = Token(None, (word_token, identifier_token))
+    token = parse_identifier(split[1])
     token.add_type(DIR_WORD)
     return token
 
@@ -234,11 +228,9 @@ def parse_dir_word(text):
 def parse_dir_name(text):
     split = split_on_spaces(text)
     pair = [key_or_value.strip() for key_or_value in ''.join(split[1:]).split('=')]
-    name_token = Token(split[0])
-    name_token.add_type(NAME)
     identifier_token = parse_identifier(pair[0])
     number_token = parse_number(pair[1])
-    token = Token(None, (name_token, identifier_token, number_token))
+    token = Token(split[0], (identifier_token, number_token))
     token.add_type(DIR_NAME)
     return token
 
@@ -259,8 +251,7 @@ def parse_dir(text):
 
 def parse_label_def(text):
     label = text.strip(':')
-    identifier_token = parse_identifier(label)
-    token = Token(None, (identifier_token,))
+    token = parse_identifier(label)
     token.add_type(LABEL_DEF)
     return token
 
@@ -308,6 +299,7 @@ def parse_instruction(text):
         reg_token = parse_reg(args[0])
         imm_reg_token = parse_imm_reg(args[1])
         children = (op_token, reg_token, imm_reg_token)
+        inst_type = INST_JUMP
     elif INST_BRANCH.match(text):
         for branch_op in [OP_BEQ, OP_BLT, OP_BLE, OP_BNE]:
             if branch_op.match(op):
@@ -316,7 +308,8 @@ def parse_instruction(text):
         reg_token1 = parse_reg(args[0])
         reg_token2 = parse_reg(args[1])
         identifier_token = parse_identifier(args[2])
-        children = (reg_token1, reg_token2, identifier_token)
+        children = (op_token, reg_token1, reg_token2, identifier_token)
+        inst_type = INST_BRANCH
     elif INST_LOAD.match(text):
         for load_op in [OP_LB, OP_LH, OP_LW, OP_LD, OP_LBU, OP_LHU, OP_LWU]:
             if load_op.match(op):
@@ -324,7 +317,8 @@ def parse_instruction(text):
 
         reg_token = parse_reg(args[0])
         imm_reg_token = parse_imm_reg(args[1])
-        children = (reg_token, imm_reg_token)
+        children = (op_token, reg_token, imm_reg_token)
+        inst_type = INST_LOAD
     elif INST_STORE.match(text):
         for store_op in [OP_SB, OP_SH, OP_SW, OP_SD]:
             if store_op.match(op):
@@ -332,7 +326,8 @@ def parse_instruction(text):
 
         reg_token = parse_reg(args[0])
         imm_reg_token = parse_imm_reg(args[1])
-        children = (reg_token, imm_reg_token)
+        children = (op_token, reg_token, imm_reg_token)
+        inst_type = INST_STORE
     elif INST_FUNCI.match(text):
         for func_op in [OP_ADDI, OP_ANDI, OP_ORI, OP_XORI]:
             if func_op.match(op):
@@ -341,7 +336,8 @@ def parse_instruction(text):
         reg_token1 = parse_reg(args[0])
         reg_token2 = parse_reg(args[1])
         imm_token = parse_imm(args[2])
-        children = (reg_token1, reg_token2, imm_token)
+        children = (op_token, reg_token1, reg_token2, imm_token)
+        inst_type = INST_FUNCI
     elif INST_FUNCR.match(text):
         for func_op in [OP_ADD, OP_AND, OP_OR, OP_XOR, OP_SUB, OP_NAND, OP_NOR, OP_NXOR, OP_EQ, OP_LT, OP_LE, OP_NE]:
             if func_op.match(op):
@@ -350,11 +346,13 @@ def parse_instruction(text):
         reg_token1 = parse_reg(args[0])
         reg_token2 = parse_reg(args[1])
         reg_token3 = parse_reg(args[2])
-        children = (reg_token1, reg_token2, reg_token3)
+        children = (op_token, reg_token1, reg_token2, reg_token3)
+        inst_type = INST_FUNCR
     else:
         raise ParseException('Instruction parse failure')
 
     token = Token(None, children)
+    token.add_type(inst_type)
     token.add_type(INST)
     return token
 
