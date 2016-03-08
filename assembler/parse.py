@@ -254,18 +254,34 @@ def parse_label_def(text):
 
 
 def parse_pseudo(text):
-    if PS_NOT.match(pseudo):
-    elif PS_CALL.match(pseudo):
-    elif PS_RET.match(pseudo):
-    elif PS_JMP.match(pseudo):
-    elif PS_BGT.match(pseudo):
-    elif PS_BGE.match(pseudo):
-    elif PS_BR.match(pseudo):
-    elif PS_GT.match(pseudo):
-    elif PS_GE.match(pseudo):
-    elif PS_SUBI.match(pseudo):
+    split = re.split('\S', text)
+    op = split[0]
+    args = split[1].split(',')
+
+    if PS_NOT.match(text):
+        instruction = 'NAND {0},{1},{1}'.format(args[0], args[1])
+    elif PS_CALL.match(text):
+        instruction = 'JAL RA,{0}'.format(args[0])
+    elif PS_RET.match(text):
+        instruction = 'JAL R6,0(RA)'
+    elif PS_JMP.match(text):
+        instruction = 'JAL R6,{0}'.format(args[0])
+    elif PS_BGT.match(text):
+        instruction = 'BGT {0},{1},{2}'.format(args[1], args[0], args[2])
+    elif PS_BGE.match(text):
+        instruction = 'BLE {0},{1},{2}'.format(args[1], args[0], args[2])
+    elif PS_BR.match(text):
+        instruction = 'BEQ Zero,Zero,{0}'.format(args[0])
+    elif PS_GT.match(text):
+        instruction = 'LT {0},{1},{2}'.format(args[0], args[2], args[1])
+    elif PS_GE.match(text):
+        instruction = 'LE {0},{1},{2}'.format(args[0], args[2], args[1])
+    elif PS_SUBI.match(text):
+        instruction = 'ADDI {0},{1},{2}'.format(args[0], args[1], '-' + args[2])
     else:
         raise Exception('Pseudo parse failure')
+
+    return parse_instruction(instruction)
 
 
 def parse_instruction(text):
@@ -341,21 +357,3 @@ def parse_line(text)
         return parse_dir(line)
     else:
         raise Exception('Unrecognized statement \'{0}\''.format(line))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
