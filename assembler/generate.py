@@ -2,20 +2,7 @@ import parse
 
 
 labels = {}
-
-
-def first_pass(tokens):
-    current_index = 0
-
-    for token in tokens:
-        if token.is_type(parse.LABEL_DEF):
-            labels[token.value] = current_index
-        elif token.is_type(parse.DIR_NAME):
-            labels[token.tokens[0].value] = token.tokens[1].value
-        elif token.is_type(parse.DIR_ORIG):
-            current_index = token.value
-        else:
-            current_index += 1
+names = {}
 
 
 def get_primary_opcode(op_token):
@@ -92,7 +79,21 @@ def get_secondary_opcode(op_token):
         raise Exception('Unrecognized secondary opcode')
 
 
-def generate(tokens):
+def first_pass(tokens):
+    current_index = 0
+
+    for token in tokens:
+        if token.is_type(parse.LABEL_DEF):
+            labels[token.value] = current_index - 1
+        elif token.is_type(parse.DIR_NAME):
+            names[token.tokens[0].value] = token.tokens[1].value
+        elif token.is_type(parse.DIR_ORIG):
+            current_index = token.value
+        else:
+            current_index += 1
+
+
+def second_pass(tokens):
     instructions = []
 
     for token in tokens:
@@ -116,7 +117,7 @@ def generate(tokens):
                 regno_d = token.tokens[1].value
                 regno_s = token.tokens[2].value
                 regno_t = token.tokens[3].value
-                inst = inst | (regno_s << 20) | (regno_t << 14) | (regno_d << 8) | secondary_opcode
+                inst = 0 | (regno_s << 20) | (regno_t << 14) | (regno_d << 8) | secondary_opcode
             else:
                 primary_opcode = get_primary_opcode(op_token)
 
@@ -134,21 +135,65 @@ def generate(tokens):
                 if imm_token.is_type(parse.IDENTIFIER):
                     if labels.get(imm_token.value):
                         imm = labels.get(imm_token.value) - len(instructions)
+                    elif names.get(imm_token.value):
+                        imm = names.get(imm_token.value)
                     else:
                         raise Exception('Identifier \'{0}\' not found'.format(imm_token.value))
                 else:
                     imm = imm_token.value
 
-                inst = inst | (primary_opcode << 26) | (regno_s << 20) | (regno_t << 14) | imm
+                inst = 0 | (primary_opcode << 26) | (regno_s << 20) | (regno_t << 14) | (imm & 0B00000000000000000011111111111111)
 
             instructions.append(inst)
 
+    return instructions
 
 
+def create_groups(values):
+    current = values[0]
+    groups = [[current]]
+
+    for value in values[1:]:
+        if value == current:
+            groups[-1].append(value)
+        else:
+            current = value
+            groups.append([value])
+
+    return groups
 
 
+def hex_str(num):
+    h = '{0:x}'.format(num)
+
+    for i in range(8 - len(h)):
+        h = '0' + h
+
+    return h
 
 
+def generate(tokens):
+    first_pass(tokens)
+    instructions = second_pass(tokens)
+    groups = create_groups(instructions)
+    current = 0
+
+    print('WIDTH=32;')
+    print('DEPTH=16384;')
+    print('ADDRESS_RADIX=HEX;')
+    print('DATA_RADIX=HEX;')
+    print('CONTENT BEGIN')
+
+    for group in groups:
+        if len(group) == 1:
+            print('{0} : {1};'.format(hex_str(current), hex_str(group[0])))
+        else:
+            print('[{0}..{1}] : {2};'.format(hex_str(current), hex_str(current + len(group)), hex_str(group[0])))
+
+        current += len(group)
+
+    print('[{0}..{1}] : deaddead;'.format(hex_str(current), hex_str(16384)))
+    print('END;')
 
 
 
