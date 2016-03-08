@@ -1,3 +1,6 @@
+from regex import re_wrap, re_unwrap, re_or, re_combine
+import re
+
 SPACE = re_wrap('\s+')
 OPTIONAL_SPACE = re_wrap('\s*')
 COMMENT = re_wrap(';.*')
@@ -83,6 +86,10 @@ INST_FUNCR = re_combine(OP_FUNCR, SPACE, REG, ',', REG, ',', REG)
 INST = re_or(INST_JUMP, INST_BRANCH, INST_LOAD, INST_STORE, INST_FUNCI, INST_FUNCR)
 
 
+class ParseException(Exception):
+    pass
+
+
 class Token(object):
     def __init__(self, value, tokens=None):
         self.value = value
@@ -94,15 +101,19 @@ class Token(object):
         self.token_types.append(token_type)
 
 
-    def is(self, token_type):
+    def is_type(self, token_type):
         return token_type in self.token_types
 
 
-def parse_decimal(c):
+def split_on_spaces(text):
+    return [x for x in re.split('\s', text) if x.strip()]
+
+
+def parse_decimal(text):
     try:
         token = Token(int(text))
     except:
-        raise Exception('Expecting number, got \'{0}\''.format(text))
+        raise ParseException('Expecting number, got \'{0}\''.format(text))
 
     token.add_type(DECIMAL)
     return token
@@ -176,16 +187,16 @@ def parse_reg(text):
         token = Token(5)
         token.add_type(REG_FP)
     elif REG_A.match(text):
-        token = Token(int(text[1:] + 16)
+        token = Token(int(text[1:]) + 16)
         token.add_type(REG_A)
     elif REG_T.match(text):
-        token = Token(int(text[1:] + 32)
+        token = Token(int(text[1:]) + 32)
         token.add_type(REG_T)
     elif REG_S.match(text):
-        token = Token(int(text[1:] + 48)
+        token = Token(int(text[1:]) + 48)
         token.add_type(REG_S)
     else:
-        raise Exception('Register parse failure')
+        raise ParseException('Register parse failure')
 
     token.add_type(REG)
     return token
@@ -201,27 +212,28 @@ def parse_imm_reg(text):
 
 
 def parse_dir_orig(text):
-    split = re.split('\S', text)
+    split = split_on_spaces(text)
     orig_token = Token(split[0])
     orig_token.add_type(ORIG)
-    number_token = parse_number(text)
+    number_token = parse_number(split[1])
     token = Token(None, (orig_token, number_token))
     token.add_type(DIR_ORIG)
     return token
 
 
 def parse_dir_word(text):
-    split = re.split('\S', text)
+    split = split_on_spaces(text)
     word_token = Token(split[0])
     word_token.add_type(WORD)
-    identifier_token = parse_identifier(text)
+    identifier_token = parse_identifier(split[1])
     token = Token(None, (word_token, identifier_token))
     token.add_type(DIR_WORD)
     return token
 
 
 def parse_dir_name(text):
-    pair = [key_or_value.strip() for key_or_value in re.split('\S', text)[1].split('=')]
+    split = split_on_spaces(text)
+    pair = [key_or_value.strip() for key_or_value in ''.join(split[1:]).split('=')]
     name_token = Token(split[0])
     name_token.add_type(NAME)
     identifier_token = parse_identifier(pair[0])
@@ -239,7 +251,7 @@ def parse_dir(text):
     elif DIR_NAME.match(text):
         token = parse_dir_name(text)
     else:
-        raise Exception('Directive parse failure')
+        raise ParseException('Directive parse failure')
 
     token.add_type(DIR)
     return token
@@ -254,9 +266,13 @@ def parse_label_def(text):
 
 
 def parse_pseudo(text):
-    split = re.split('\S', text)
+    split = split_on_spaces(text)
     op = split[0]
     args = split[1].split(',')
+    print(text)
+    print(split)
+    print(split[1])
+    print(args)
 
     if PS_NOT.match(text):
         instruction = 'NAND {0},{1},{1}'.format(args[0], args[1])
@@ -279,23 +295,24 @@ def parse_pseudo(text):
     elif PS_SUBI.match(text):
         instruction = 'ADDI {0},{1},{2}'.format(args[0], args[1], '-' + args[2])
     else:
-        raise Exception('Pseudo parse failure')
+        raise ParseException('Pseudo parse failure')
+
 
     return parse_instruction(instruction)
 
 
 def parse_instruction(text):
-    split = re.split('\S', instruction)
+    split = split_on_spaces(text)
     op = split[0]
     args = split[1].split(',')
     op_token = Token(op)
 
-    if parse.INST_JUMP.match(instruction):
+    if INST_JUMP.match(text):
         op_token.add_type(OP_JAL)
         reg_token = parse_reg(args[0])
         imm_reg_token = parse_imm_reg(args[1])
         children = (op_token, reg_token, imm_reg_token)
-    elif parse.INST_BRANCH.match(instruction):
+    elif INST_BRANCH.match(text):
         for branch_op in [OP_BEQ, OP_BLT, OP_BLE, OP_BNE]:
             if branch_op.match(op):
                 op_token.add_type(branch_op)
@@ -303,16 +320,16 @@ def parse_instruction(text):
         reg_token1 = parse_reg(args[0])
         reg_token2 = parse_reg(args[1])
         identifier_token = parse_identifier(args[2])
-        children = (reg_token1, reg_token2, children)
-    elif parse.INST_LOAD.match(instruction):
-        for load_op in [OP_LB, OP_LH, OP_LW, OP_LD, OP_LBU, OP_LHU, OPLWU]:
+        children = (reg_token1, reg_token2, identifier_token)
+    elif INST_LOAD.match(text):
+        for load_op in [OP_LB, OP_LH, OP_LW, OP_LD, OP_LBU, OP_LHU, OP_LWU]:
             if load_op.match(op):
                 op_token.add_type(load_op)
 
         reg_token = parse_reg(args[0])
         imm_reg_token = parse_imm_reg(args[1])
         children = (reg_token, imm_reg_token)
-    elif parse.INST_STORE.match(instruction):
+    elif INST_STORE.match(text):
         for store_op in [OP_SB, OP_SH, OP_SW, OP_SD]:
             if store_op.match(op):
                 op_token.add_type(store_op)
@@ -320,8 +337,8 @@ def parse_instruction(text):
         reg_token = parse_reg(args[0])
         imm_reg_token = parse_imm_reg(args[1])
         children = (reg_token, imm_reg_token)
-    elif parse.INST_FUNCI.match(instruction):
-        for func_op in [OP_ADDI, OP_ANDI, OP_ORI, OPXORI]:
+    elif INST_FUNCI.match(text):
+        for func_op in [OP_ADDI, OP_ANDI, OP_ORI, OP_XORI]:
             if func_op.match(op):
                 op_token.add_type(func_op)
 
@@ -329,7 +346,7 @@ def parse_instruction(text):
         reg_token2 = parse_reg(args[1])
         imm_token = parse_imm(args[2])
         children = (reg_token1, reg_token2, imm_token)
-    elif parse.INST_FUNCR.match(instruction):
+    elif INST_FUNCR.match(text):
         for func_op in [OP_ADD, OP_AND, OP_OR, OP_XOR, OP_SUB, OP_NAND, OP_NOR, OP_NXOR, OP_EQ, OP_LT, OP_LE, OP_NE]:
             if func_op.match(op):
                 op_token.add_type(func_op)
@@ -339,21 +356,21 @@ def parse_instruction(text):
         reg_token3 = parse_reg(args[2])
         children = (reg_token1, reg_token2, reg_token3)
     else:
-        raise Exception('Instruction parse failure')
+        raise ParseException('Instruction parse failure')
 
     token = Token(None, children)
     token.add_type(INST)
     return token
 
 
-def parse_line(text)
-    if INST.match(line):
-        return parse_instruction(line)
-    elif PSUEDO.match(line):
-        return parse_pseudo(line)
-    elif LABEL_DEF.match(line):
-        return parse_label_def(line)
-    elif DIR.match(line):
-        return parse_dir(line)
+def parse_line(text):
+    if INST.match(text):
+        return parse_instruction(text)
+    elif PSUEDO.match(text):
+        return parse_pseudo(text)
+    elif LABEL_DEF.match(text):
+        return parse_label_def(text)
+    elif DIR.match(text):
+        return parse_dir(text)
     else:
-        raise Exception('Unrecognized statement \'{0}\''.format(line))
+        raise ParseException('Unrecognized statement \'{0}\''.format(text))

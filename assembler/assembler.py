@@ -1,7 +1,6 @@
 import sys
 import os
 import parse
-from regex import re_unwrap, re_wrap, re_or, re_combine
 
 
 try:
@@ -11,16 +10,16 @@ except:
     sys.exit(1)
 
 
-def sanitize_instruction(instruction):
-    if ';' in instruction:
-        instruction = instruction.split(';')[0]
+def sanitize_line(line):
+    if ';' in line:
+        line = line.split(';')[0]
 
-    instruction = instruction.strip()
+    line = line.strip()
 
-    if instruction == '':
+    if line == '':
         return None
 
-    return instruction
+    return line
 
 
 def main():
@@ -37,17 +36,17 @@ def main():
 
                 if sanitized:
                     tokens.append(parse.parse_line(sanitized))
-                else:
-                    print('skipped line: {0}'.format(line))
-            except Exception as e:
-                raise Exception('Error at line number {0}: {1}'.format(line_num, str(e)))
+            except parse.ParseException as e:
+                raise parse.ParseException('Error at line number {0}: {1}, {2}'.format(line_num, line, str(e)))
 
             line_num += 1
+
+    for token in tokens:
+        print(token)
 
 
 if __name__ == '__main__':
     try:
         main()
-    except Exception as e:
+    except parse.ParseException as e:
         print('ERROR: {0}'.format(str(e)))
-        sys.exit(1)
