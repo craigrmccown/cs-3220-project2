@@ -123,18 +123,18 @@ def parse_hex_digit(c):
     if re.match('\d', c):
         return int(c)
     else:
-        return ord('C') - ord('A') + 10
+        return ord(c) - ord('A') + 10
 
 
 def parse_hex(text):
     c = text[-1]
     num = 0
-    digit = 1
+    digit = 0
 
     while c != 'x':
-        num += parse_hex_digit(c) ** digit
+        num += parse_hex_digit(c) * (16 ** digit)
         digit += 1
-        c = text[-1 * digit]
+        c = text[-1 * digit - 1]
 
     token = Token(num)
     token.add_type(HEX)
@@ -269,10 +269,6 @@ def parse_pseudo(text):
     split = split_on_spaces(text)
     op = split[0]
     args = split[1].split(',')
-    print(text)
-    print(split)
-    print(split[1])
-    print(args)
 
     if PS_NOT.match(text):
         instruction = 'NAND {0},{1},{1}'.format(args[0], args[1])

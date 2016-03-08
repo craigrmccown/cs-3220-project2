@@ -1,6 +1,7 @@
 import sys
 import os
 import parse
+import generate
 
 
 try:
@@ -41,8 +42,7 @@ def main():
 
             line_num += 1
 
-    for token in tokens:
-        print(token)
+    generate.generate(tokens)
 
 
 if __name__ == '__main__':
