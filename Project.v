@@ -17,7 +17,7 @@
 	parameter INSTBITS = 32;
 	parameter REGNOBITS = 6;
 	parameter IMMBITS = 14;
-	parameter FUNCBITS = 3;
+	parameter FUNCBITS = 4;
 	parameter STARTPC = 32'h100;
 	parameter ADDRHEX = 32'hFFFFF000;
 	parameter ADDRLEDR = 32'hFFFFF020;
@@ -62,10 +62,19 @@
 	parameter OP2_NXOR = 8'b00101110;
 	
 	/* alu functions */
-	parameter FUNC_ADD = 3'b000;
-	parameter FUNC_AND = 3'b100;
-	parameter FUNC_OR = 3'b101;
-	parameter FUNC_XOR = 3'b110;
+	parameter FUNC_ADD = 4'b0000;
+	parameter FUNC_LT = 4'b0001;
+	parameter FUNC_LE = 4'b0010;
+	parameter FUNC_NE = 4'b0011;
+	parameter FUNC_AND = 4'b0100;
+	parameter FUNC_OR = 4'b0101;
+	parameter FUNC_XOR = 4'b0110;
+	/* ++additions++ */
+	parameter FUNC_SUB = 4'b1000;
+	parameter FUNC_NAND = 4'b1100;
+	parameter FUNC_NOR = 4'b1101;
+	parameter FUNC_NXOR = 4'b1110;
+	
 
 	/* pll configuration */
 	wire clk,locked;
@@ -137,8 +146,18 @@
 	(.IBITS(IMMBITS), .OBITS(DBITS)) #SXT(imm, immsxt);
   
 	// TODO put the code for data memory and I/O here
+	reg [15:0] mem[0:1023];
+	reg [15:0] mdr;
+	reg [9:0] mar;
+	assign mar = 10'd0; // MAR starts with value 0
+	
+	always @(posedge clock) begin
+		if (!reset) begin
+			mdr <= mem[mar];			// read mem
+			mar <= mar + 10'd1;		// inc mar reg
+		end
+	end
 
-	// TODO create the registers and connect them to the bus
   
 	reg [(DBITS - 1):0] regs[63:0];
 	reg [(REGNOBITS - 1):0] regno;
@@ -184,9 +203,16 @@
 	always @(A or B) begin
 		case (func)
 			FUNC_ADD: ALUout = A + B;
+			FUNC_LT: ALUout = A < B;
+			FUNC_LE: ALUout = A < B or A == B;
+			FUNC_NE: ALUout = A != B;
 			FUNC_AND: ALUout = A and B;
 			FUNC_OR: ALUout = A or B;
 			FUNC_XOR: ALUout = A ^ B;
+			FUNC_SUB: ALUout = A - B;
+			FUNC_NAND: ALUout = !(A and B);
+			FUNC_NOR: ALUout = !(A or B);
+			FUNC_NXOR: ALUout = !(A ^ B);
 		endcase
 	end
   
@@ -223,36 +249,87 @@
 					OP1_ALUR: begin
 						case(op2)
 							OP2_ADD, OP2_SUB,
-							OP2_NAND, OP2_NOR, OP2_NXOR,
 							OP2_EQ, OP2_LT, OP2_LE, OP2_NE,
-							OP2_AND, OP2_OR, OP2_XOR:
+							OP2_AND, OP2_OR, OP2_XOR,
+							OP2_NAND, OP2_NOR, OP2_NXOR
 								next_state = S_ALUR1;
 							default: next_state = S_ERROR;
 						endcase
 					end
-					OP1_ADDI, OP1_ANDI, OP1_ORI, OP1_XORI: begin
+					OP1_ADDI, OP1_ANDI,
+					OP1_ORI, OP1_XORI: begin
 						next_state = S_ALUI1;
 					end
-					// TODO fill out all possible states
+					OP1_BEQ, OP1_BLT, OP1_BLE, OP1_BNE begin
+						next_state = S_B1;
+					end
+					OP1_JAL: begin
+						next_state = S_JALR1;
+					end
+					OP1_S: begin
+						next_state = S_SW1;
+					end
+					OP1_L: begin
+						next_state = S_LD1;
+					default: next_state = S_ERROR;
 				endcase
-				
 				{LdA, LdB, regno, DrReg} = {1'b1, 1'b1, rs, 1'b1};
 			end
 			S_ALUI1: begin
 				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, ALUI2};
 			end
 			S_ALUI2: begin
-				{ALUfunc, DrALU, regno, WrReg, next_state} = {FUNC_ADD, 1'b1, rd, 1'b1, S_FETCH1};
+				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rd, 1'b1, S_FETCH1};
 			end
 			S_ALUR1: begin
 				{LdB, regno, DrReg, next_state} = {1'b1, rt, 1'b1, ALUR2};
 			end
 			S_ALUR2: begin
-				{ALUfunc, DrALU, regno, WrReg, next_state} = {FUNC_ADD, 1'b1, rd, 1'b1, S_FETCH1};
+				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rd, 1'b1, S_FETCH1};
 			end
-			
-			// TODO put the rest of the "microcode" here
-			
+			S_JALR1: begin
+				{LdB, regno, WrReg, DrPC, next_state} = {1'b1, rt, 1'b1, 1'b1, S_JALR2};
+			end
+			S_JALR2 begin
+				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_JALR3};
+			end
+			S_JALR3 begin
+				{ALUfunc, DrALU, LdPC, next_state} = {FUNC_ADD, 1'b1, 1'b1, S_FETCH1};
+			end
+			S_B1: begin
+				{LdB, regno, DrReg, next_state} = {1'b1, rt, 1'b1, S_B2};
+			end
+			S_B2: begin 	// TODO: PC + 4?
+				{ALUfunc, DrALU, next_state} = {op1func, 1'b1, S_B3};
+				if (!thebus[0])
+					next_state = S_FETCH1;
+			end
+			S_B3: begin
+				{LdA, DrPC, next_state} = {1'b1, 1'b1, S_B4};
+			end
+			S_B4: begin
+				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_B5};
+			end
+			S_B5: begin
+				{LdPC, ALUfunc, DrALU, next_state} = {1'b1, op1func, 1'b1, S_FETCH1};
+			end
+			S_S1: begin
+				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_S2}; 
+			end
+			S_S2: begin
+				{ALUfunc, DrALU, regno, WrReg, next_state} = {op1func, 1'b1, rt, 1'b1, S_S3};
+			end
+			S_S3: begin
+				{regno, WrMem, DrMem, next_state} = {rt, 1'b1, 1'b1, S_FETCH1}; //need to set regno again?
+			end
+			S_L1: begin
+				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_L2}; 
+			end
+			S_L2: begin
+				{ALUfunc, DrALU, regno, WrReg, next_state} = {op1func, 1'b1, rt, 1'b1, S_L3};
+			end
+			S_L3: begin
+				{DrMem, regno, WrRep, next_state} = {1'b1, rt, 1'b1, S_FETCH1}; // regno need to be specified before DrMem? not consistent with S_S3 currently..
 			default: next_state=S_ERROR;
 		endcase
 	end
