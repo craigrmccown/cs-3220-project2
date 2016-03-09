@@ -114,7 +114,7 @@ def first_pass(tokens):
         elif token.is_type(parse.DIR_NAME):
             names[token.tokens[0].value] = token.tokens[1].value
         elif token.is_type(parse.DIR_ORIG):
-            current_index = token.value
+            current_index = int(token.value / 4)
 
             if token.value < current_index:
                 raise SemanticException(token, 'Cannot set ORIG to a previous location')
@@ -127,7 +127,7 @@ def second_pass(tokens):
 
     for token in tokens:
         if token.is_type(parse.DIR_ORIG):
-            for i in range(token.value - len(instructions)):
+            for i in range(int((token.value - len(instructions) * 4) / 4)):
                 instructions.append(0xDEADDEAD)
         elif token.is_type(parse.DIR_WORD):
             instructions.append(lookup_name(token, token.value))
@@ -147,9 +147,13 @@ def second_pass(tokens):
                     regno_t = token.tokens[1].value
                     regno_s = token.tokens[2].tokens[1].value
                     imm_token = token.tokens[2].tokens[0]
-                elif token.is_type(parse.INST_BRANCH) or token.is_type(parse.INST_FUNCI):
+                elif token.is_type(parse.INST_FUNCI):
                     regno_t = token.tokens[1].value
                     regno_s = token.tokens[2].value
+                    imm_token = token.tokens[3]
+                elif token.is_type(parse.INST_BRANCH):
+                    regno_t = token.tokens[2].value
+                    regno_s = token.tokens[1].value
                     imm_token = token.tokens[3]
                 else:
                     raise Exception('Unrecognized instruction type')
@@ -168,7 +172,7 @@ def second_pass(tokens):
                         raise SemanticException(token, 'Expecting name or number, got \'{0}\''.format(imm_token.value))
                 elif token.is_type(parse.INST_JUMP):
                     if imm_token.is_type(parse.IDENTIFIER):
-                        imm = lookup_label(token, imm_token.value) - len(instructions)
+                        imm = lookup_label(token, imm_token.value) + 1
                     elif imm_token.is_type(parse.NUMBER):
                         imm = imm_token.value
                     else:
@@ -176,7 +180,7 @@ def second_pass(tokens):
                 else:
                     if imm_token.is_type(parse.IDENTIFIER):
                         if labels.get(imm_token.value):
-                            imm = labels.get(imm_token.value)
+                            imm = (labels.get(imm_token.value) + 1) * 4
                         elif names.get(imm_token.value):
                             imm = names.get(imm_token.value)
                         else:
@@ -231,10 +235,10 @@ def generate(tokens):
     for group in groups:
         if len(group) == 1:
             print('{0} : {1};'.format(hex_str(current), hex_str(group[0])))
+            current += 1
         else:
-            print('[{0}..{1}] : {2};'.format(hex_str(current), hex_str(current + len(group)), hex_str(group[0])))
-
-        current += len(group)
+            print('[{0}..{1}] : {2};'.format(hex_str(current), hex_str(current + len(group) - 1), hex_str(group[0])))
+            current += len(group)
 
     print('[{0}..{1}] : deaddead;'.format(hex_str(current), hex_str(16383)))
     print('END;')
