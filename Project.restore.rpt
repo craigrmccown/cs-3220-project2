@@ -1,5 +1,5 @@
 Restore Archived Project report for Project
-Sat Feb 27 15:17:00 2016
+Wed Mar  9 16:27:23 2016
 Quartus Prime Version 15.1.0 Build 185 10/21/2015 SJ Lite Edition
 
 
@@ -37,7 +37,7 @@ agreement for further details.
 +-------------------------------------------------------------------------+
 ; Restore Archived Project Summary                                        ;
 +---------------------------------+---------------------------------------+
-; Restore Archived Project Status ; Successful - Sat Feb 27 15:17:00 2016 ;
+; Restore Archived Project Status ; Successful - Wed Mar  9 16:27:23 2016 ;
 ; Revision Name                   ; Project                               ;
 ; Top-level Entity Name           ; Project                               ;
 ; Family                          ; Cyclone V                             ;
@@ -47,13 +47,13 @@ agreement for further details.
 +-----------------------------------+
 ; Restore Archived Project Messages ;
 +-----------------------------------+
-Info: Successfully restored 'C:/Users/Craig/Downloads/Project2.qar' into the 'C:\\Users\\Craig\\Documents\\School\\cs-3220\\project-2/' directory
+Info: Successfully restored '/home/hvnt/Downloads/Project2.qar' into the '/home/hvnt/Downloads/Project2_restored/' directory
 Info: Generated report 'Project.restore.rpt'
-Info (23030): Evaluation of Tcl script c:/altera_lite/15.1/quartus/common/tcl/apps/qpm/qar.tcl was successful
+Info (23030): Evaluation of Tcl script /home/hvnt/altera_lite/15.1/quartus/common/tcl/apps/qpm/qar.tcl was successful
 Info: Quartus Prime Shell was successful. 0 errors, 0 warnings
-    Info: Peak virtual memory: 659 megabytes
-    Info: Processing ended: Sat Feb 27 15:17:00 2016
-    Info: Elapsed time: 00:00:02
+    Info: Peak virtual memory: 1201 megabytes
+    Info: Processing ended: Wed Mar  9 16:27:23 2016
+    Info: Elapsed time: 00:00:01
     Info: Total CPU time (on all processors): 00:00:01
 
 

@@ -317,10 +317,10 @@ module Project(
 			S_JALR1: begin
 				{regno, WrReg, DrPC, next_state} = {rt, 1'b1, 1'b1, S_JALR2};
 			end
-			S_JALR2 begin
-				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_JALR3};
+			S_JAL2 begin
+				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_JAL3};
 			end
-			S_JALR3 begin
+			S_JAL3 begin
 				{ALUfunc, DrALU, LdPC, next_state} = {FUNC_ADD, 1'b1, 1'b1, S_FETCH1};
 			end
 			S_B1: begin
