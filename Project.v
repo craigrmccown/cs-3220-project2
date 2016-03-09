@@ -1,4 +1,4 @@
-	module Project(
+module Project(
 	input        CLOCK_50,
 	input        RESET_N,
 	input  [3:0] KEY,
@@ -136,12 +136,12 @@
 	
 	assign op1 = IR[(INSTBITS - 1):(INSTBITS - OP1BITS)];
 	assign op1func = op1[(FUNCBITS - 1):0];
-	assign rd = IR[(INSTBITS - OP1BITS - 1):(INSTBITS - OP1BITS - REGNOBITS)];
-	assign rs = IR[(INSTBITS - OP1BITS - REGNOBITS - 1):(INSTBITS - OP1BITS - (REGNOBITS * 2))];
-	assign rt = IR[(INSTBITS - OP1BITS - (REGNOBITS * 2) - 1):(INSTBITS - OP1BITS - (REGNOBITS * 3))];
-	assign imm = IR[(INSTBITS - OP1BITS - (REGNOBITS * 2) - 1):0];
+	assign rs = IR[(INSTBITS - OP1BITS - 1):(INSTBITS - OP1BITS - REGNOBITS)];
+	assign rt = IR[(INSTBITS - OP1BITS - REGNOBITS - 1):(INSTBITS - OP1BITS - (REGNOBITS * 2))];
+	assign rd = IR[(INSTBITS - OP1BITS - (REGNOBITS * 2) - 1):(INSTBITS - OP1BITS - (REGNOBITS * 3))];
 	assign op2 = IR[(INSTBITS - OP1BITS - (REGNOBITS * 3) - 1):0];
 	assign op2func = op2[(FUNCBITS - 1):0];
+	assign imm = IR[(INSTBITS - OP1BITS - (REGNOBITS * 2) - 1):0];
 	
 	(.IBITS(IMMBITS), .OBITS(DBITS)) #SXT(imm, immsxt);
   
@@ -234,7 +234,7 @@
 	 
 	// TODO put parameters for the remaining state names here
 
-	reg [(S_BITS-1):0] state,next_state;
+	reg [(S_BITS-1):0] state, next_state;
 	
 	always @(state or op1 or rs or rt or rd or op2 or ALUout[0]) begin
 		{LdPC, DrPC, IncPC, LdMAR, WrMem, DrMem, LdIR, DrOff, ShOff, LdA, LdB, ALUfunc, DrALU, regno, DrReg, WrReg, next_state} =
@@ -287,8 +287,8 @@
 			S_ALUR2: begin
 				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rd, 1'b1, S_FETCH1};
 			end
-			S_JAL1: begin
-				{LdB, regno, WrReg, DrPC, next_state} = {1'b1, rt, 1'b1, 1'b1, S_JAL2};
+			S_JALR1: begin
+				{regno, WrReg, DrPC, next_state} = {rt, 1'b1, 1'b1, S_JALR2};
 			end
 			S_JAL2 begin
 				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_JAL3};
@@ -299,10 +299,15 @@
 			S_B1: begin
 				{LdB, regno, DrReg, next_state} = {1'b1, rt, 1'b1, S_B2};
 			end
-			S_B2: begin 	// TODO: PC + 4?
-				{ALUfunc, DrALU, next_state} = {op1func, 1'b1, S_B3};
-				if (!thebus[0])
+			S_B2: begin
+				{ALUfunc, DrALU} = {op1func, 1'b1};
+
+                // move to next state?
+				if (!thebus[0]) begin
 					next_state = S_FETCH1;
+                end else begin
+                    next_state = S_B3;
+                end
 			end
 			S_B3: begin
 				{LdA, DrPC, next_state} = {1'b1, 1'b1, S_B4};
@@ -317,19 +322,19 @@
 				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_S2}; 
 			end
 			S_S2: begin
-				{ALUfunc, DrALU, regno, WrReg, next_state} = {op1func, 1'b1, rt, 1'b1, S_S3};
+				{ALUfunc, DrALU, LdMAR, next_state} = {op1func, 1'b1, 1'b1, S_S3};
 			end
 			S_S3: begin
-				{regno, WrMem, DrMem, next_state} = {rt, 1'b1, 1'b1, S_FETCH1}; //need to set regno again?
+				{regno, WrMem, DrReg, next_state} = {rt, 1'b1, 1'b1, S_FETCH1}; //need to set regno again?
 			end
 			S_L1: begin
 				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_L2}; 
 			end
 			S_L2: begin
-				{ALUfunc, DrALU, regno, WrReg, next_state} = {op1func, 1'b1, rt, 1'b1, S_L3};
+				{ALUfunc, DrALU, LdMAR, next_state} = {op1func, 1'b1, 1'b1, S_L3};
 			end
 			S_L3: begin
-				{DrMem, regno, WrRep, next_state} = {1'b1, rt, 1'b1, S_FETCH1}; // regno need to be specified before DrMem? not consistent with S_S3 currently..
+				{DrMem, regno, WrReg, next_state} = {1'b1, rt, 1'b1, S_FETCH1}; // regno need to be specified before DrMem? not consistent with S_S3 currently..
 			default: next_state=S_ERROR;
 		endcase
 	end
