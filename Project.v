@@ -96,6 +96,10 @@ module Project(
 	reg [(DBITS-1):0] PC;
 	reg LdPC, DrPC, IncPC;
 
+    initial begin
+        PC <= {(DBITS - 9){1'b0}, 9'h100};
+    end
+
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
 			PC <= STARTPC;
@@ -143,22 +147,36 @@ module Project(
 	assign op2func = op2[(FUNCBITS - 1):0];
 	assign imm = IR[(INSTBITS - OP1BITS - (REGNOBITS * 2) - 1):0];
 	
+    /* create sxt offset */
 	(.IBITS(IMMBITS), .OBITS(DBITS)) #SXT(imm, immsxt);
+    reg ShOff, DrOff;
+    assign immsxt = ShOff ? (immsxt << 2) : BUSZ;
+    assign thebus = DrOff ? immsxt : BUSZ;
   
-	// TODO put the code for data memory and I/O here
-	reg [15:0] mem[0:1023];
-	reg [15:0] mdr;
-	reg [9:0] mar;
-	assign mar = 10'd0; // MAR starts with value 0
+    /* create dmem */
+	reg [(DBITS - 1):0] dmem[0:1023];
+	reg [(DBITS - 1):0] MDR, MAR;
+    reg WrMem, LdMAR, DrMem;
+
+	initial begin
+        assign MAR = {(DBITS - 1){1'b0}, 1'b1};
+    end
 	
-	always @(posedge clock) begin
-		if (!reset) begin
-			mdr <= mem[mar];			// read mem
-			mar <= mar + 10'd1;		// inc mar reg
-		end
+	always @(posedge clk) begin
+        MDR <= dmem[MAR]
+
+        if (WrMem && !reset) begin
+            dmem[MAR] <= thebus;
+        end
+
+		if (LdMAR && !reset) begin
+            MAR <= thebus;
+        end
 	end
 
+	assign thebus = DrMem ? MDR : BUSZ;
   
+    /* create register file */
 	reg [(DBITS - 1):0] regs[63:0];
 	reg [(REGNOBITS - 1):0] regno;
 	reg WrReg, DrReg;
@@ -203,9 +221,9 @@ module Project(
 	always @(A or B) begin
 		case (func)
 			FUNC_ADD: ALUout = A + B;
-			FUNC_LT: ALUout = A < B;
-			FUNC_LE: ALUout = A < B or A == B;
-			FUNC_NE: ALUout = A != B;
+			FUNC_LT: ALUout = (A < B) ? 32'd1 : 0;
+			FUNC_LE: ALUout = (A < B or A == B) ? 32'd1 : 0;
+			FUNC_NE: ALUout = (A != B) ? 32'd1 : 0;
 			FUNC_AND: ALUout = A and B;
 			FUNC_OR: ALUout = A or B;
 			FUNC_XOR: ALUout = A ^ B;
@@ -221,18 +239,27 @@ module Project(
 	parameter [(S_BITS - 1):0]
 		S_ZERO = {(S_BITS){1'b0}},
 		S_ONE = {{(S_BITS - 1){1'b0}}, 1'b1},
-		S_TWO = {{(S_BITS - 2){1'b0}}, 2'b10},
-		S_THREE = {{(S_BITS - 2){1'b0}}, 2'b11},
-		S_FOUR = {{(S_BITS - 3){1'b0}}, 3'b100},
-		S_FIVE = {{(S_BITS - 3){1'b0}}, 3'b101},
 		S_FETCH1 = S_ZERO,
 		S_FETCH2 = S_ONE,
-		S_ALUI1 = S_TWO,
-		S_ALUI2 = S_THREE,
-		S_ALUR1 = S_FOUR,
-		S_ALUR2 = S_FIVE;
-	 
-	// TODO put parameters for the remaining state names here
+		S_ALUI1 = S_ONE * 2,
+		S_ALUI2 = S_ONE * 3,
+		S_ALUR1 = S_ONE * 4,
+		S_ALUR2 = S_ONE * 5,
+		S_JAL1 = S_ONE * 6,
+		S_JAL2 = S_ONE * 7,
+		S_JAL3 = S_ONE * 8,
+		S_B1 = S_ONE * 9,
+		S_B2 = S_ONE * 10,
+		S_B3 = S_ONE * 11,
+		S_B4 = S_ONE * 12,
+		S_B5 = S_ONE * 13,
+		S_S1 = S_ONE * 14,
+		S_S2 = S_ONE * 15,
+		S_S3 = S_ONE * 16,
+		S_L1 = S_ONE * 17,
+		S_L2 = S_ONE * 18,
+		S_L3 = S_ONE * 19;
+		S_ERROR = S_ONE * 20;
 
 	reg [(S_BITS-1):0] state, next_state;
 	
@@ -319,22 +346,22 @@ module Project(
 				{LdPC, ALUfunc, DrALU, next_state} = {1'b1, op1func, 1'b1, S_FETCH1};
 			end
 			S_S1: begin
-				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_S2}; 
+				{LdB, DrOff, next_state} = {1'b1, 1'b1, S_S2}; 
 			end
 			S_S2: begin
 				{ALUfunc, DrALU, LdMAR, next_state} = {op1func, 1'b1, 1'b1, S_S3};
 			end
 			S_S3: begin
-				{regno, WrMem, DrReg, next_state} = {rt, 1'b1, 1'b1, S_FETCH1}; //need to set regno again?
+				{regno, WrMem, DrReg, next_state} = {rt, 1'b1, 1'b1, S_FETCH1};
 			end
 			S_L1: begin
-				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_L2}; 
+				{LdB, DrOff, next_state} = {1'b1, 1'b1, S_L2}; 
 			end
 			S_L2: begin
 				{ALUfunc, DrALU, LdMAR, next_state} = {op1func, 1'b1, 1'b1, S_L3};
 			end
 			S_L3: begin
-				{DrMem, regno, WrReg, next_state} = {1'b1, rt, 1'b1, S_FETCH1}; // regno need to be specified before DrMem? not consistent with S_S3 currently..
+				{DrMem, regno, WrReg, next_state} = {1'b1, rt, 1'b1, S_FETCH1};
 			default: next_state=S_ERROR;
 		endcase
 	end
