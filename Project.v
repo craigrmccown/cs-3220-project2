@@ -279,7 +279,7 @@
 				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, ALUI2};
 			end
 			S_ALUI2: begin
-				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rd, 1'b1, S_FETCH1};
+				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rt, 1'b1, S_FETCH1};
 			end
 			S_ALUR1: begin
 				{LdB, regno, DrReg, next_state} = {1'b1, rt, 1'b1, ALUR2};
@@ -287,13 +287,13 @@
 			S_ALUR2: begin
 				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rd, 1'b1, S_FETCH1};
 			end
-			S_JALR1: begin
-				{LdB, regno, WrReg, DrPC, next_state} = {1'b1, rt, 1'b1, 1'b1, S_JALR2};
+			S_JAL1: begin
+				{LdB, regno, WrReg, DrPC, next_state} = {1'b1, rt, 1'b1, 1'b1, S_JAL2};
 			end
-			S_JALR2 begin
-				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_JALR3};
+			S_JAL2 begin
+				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_JAL3};
 			end
-			S_JALR3 begin
+			S_JAL3 begin
 				{ALUfunc, DrALU, LdPC, next_state} = {FUNC_ADD, 1'b1, 1'b1, S_FETCH1};
 			end
 			S_B1: begin
