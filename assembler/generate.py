@@ -156,7 +156,7 @@ def second_pass(tokens):
 
                 if token.is_type(parse.INST_BRANCH):
                     if imm_token.is_type(parse.IDENTIFIER):
-                        imm = lookup_label(token, imm_token.value)
+                        imm = lookup_label(token, imm_token.value) - len(instructions)
                     else:
                         raise SemanticException(token, 'Expecting label, got \'{0}\''.format(imm_token.value))
                 elif token.is_type(parse.INST_STORE):
@@ -166,10 +166,17 @@ def second_pass(tokens):
                         imm = imm_token.value
                     else:
                         raise SemanticException(token, 'Expecting name or number, got \'{0}\''.format(imm_token.value))
+                elif token.is_type(parse.INST_JUMP):
+                    if imm_token.is_type(parse.IDENTIFIER):
+                        imm = lookup_label(token, imm_token.value) - len(instructions)
+                    elif imm_token.is_type(parse.NUMBER):
+                        imm = imm_token.value
+                    else:
+                        raise SemanticException(token, 'Expecting label or number, got \'{0}\''.format(imm_token.value))
                 else:
                     if imm_token.is_type(parse.IDENTIFIER):
                         if labels.get(imm_token.value):
-                            imm = labels.get(imm_token.value) - len(instructions)
+                            imm = labels.get(imm_token.value)
                         elif names.get(imm_token.value):
                             imm = names.get(imm_token.value)
                         else:
