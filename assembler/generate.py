@@ -5,6 +5,32 @@ labels = {}
 names = {}
 
 
+class UndefinedSymbolException(Exception):
+    def __init__(self, token, message='Undefined symbol'):
+        super().__init__(message)
+        self.token = token
+
+
+class SemanticException(Exception):
+    def __init__(self, token, message='Semantic error'):
+        super().__init__(message)
+        self.token = token
+
+
+def lookup_label(line_token, label):
+    if not labels.get(label):
+        raise UndefinedSymbolException(line_token, 'Undefined label: \'{0}\''.format(label))
+
+    return labels.get(label)
+
+
+def lookup_name(line_token, name):
+    if not names.get(name):
+        raise UndefinedSymbolException(line_token, 'Undefined name: \'{0}\''.format(name))
+
+    return names.get(name)
+
+
 def get_primary_opcode(op_token):
     if op_token.is_type(parse.OP_JAL):
         return 0B001100
@@ -89,6 +115,9 @@ def first_pass(tokens):
             names[token.tokens[0].value] = token.tokens[1].value
         elif token.is_type(parse.DIR_ORIG):
             current_index = token.value
+
+            if token.value < current_index:
+                raise SemanticException(token, 'Cannot set ORIG to a previous location')
         else:
             current_index += 1
 
@@ -98,18 +127,11 @@ def second_pass(tokens):
 
     for token in tokens:
         if token.is_type(parse.DIR_ORIG):
-            if token.value < len(instructions):
-                raise Exception('ORIG backtracking!')
-
             for i in range(token.value - len(instructions)):
                 instructions.append(0xDEADDEAD)
         elif token.is_type(parse.DIR_WORD):
-            if not labels.get(token.value):
-                raise Exception('Identifier \'{0}\' not found'.format(token.value))
-
-            instructions.append(labels.get(token.value))
+            instructions.append(lookup_name(token, token.value))
         elif token.is_type(parse.INST):
-            inst = 0
             op_token = token.tokens[0]
 
             if token.is_type(parse.INST_FUNCR):
@@ -121,7 +143,7 @@ def second_pass(tokens):
             else:
                 primary_opcode = get_primary_opcode(op_token)
 
-                if token.is_type(parse.INST_JUMP) or token.is_type(parse.INST_STORE) or token.is_type(parse.INST_LOAD):
+                if token.is_type(parse.INST_STORE) or token.is_type(parse.INST_LOAD) or token.is_type(parse.INST_JUMP):
                     regno_t = token.tokens[1].value
                     regno_s = token.tokens[2].tokens[1].value
                     imm_token = token.tokens[2].tokens[0]
@@ -132,15 +154,30 @@ def second_pass(tokens):
                 else:
                     raise Exception('Unrecognized instruction type')
 
-                if imm_token.is_type(parse.IDENTIFIER):
-                    if labels.get(imm_token.value):
-                        imm = labels.get(imm_token.value) - len(instructions)
-                    elif names.get(imm_token.value):
-                        imm = names.get(imm_token.value)
+                if token.is_type(parse.INST_BRANCH):
+                    if imm_token.is_type(parse.IDENTIFIER):
+                        imm = lookup_label(token, imm_token.value)
                     else:
-                        raise Exception('Identifier \'{0}\' not found'.format(imm_token.value))
+                        raise SemanticException(token, 'Expecting label, got \'{0}\''.format(imm_token.value))
+                elif token.is_type(parse.INST_STORE):
+                    if imm_token.is_type(parse.IDENTIFIER):
+                        imm = lookup_name(token, imm_token.value)
+                    elif imm_token.is_type(parse.NUMBER):
+                        imm = imm_token.value
+                    else:
+                        raise SemanticException(token, 'Expecting name or number, got \'{0}\''.format(imm_token.value))
                 else:
-                    imm = imm_token.value
+                    if imm_token.is_type(parse.IDENTIFIER):
+                        if labels.get(imm_token.value):
+                            imm = labels.get(imm_token.value) - len(instructions)
+                        elif names.get(imm_token.value):
+                            imm = names.get(imm_token.value)
+                        else:
+                            raise UndefinedException(token, imm_token.value)
+                    elif imm_token.is_type(parse.NUMBER):
+                        imm = imm_token.value
+                    else:
+                        raise SemainticException(token, 'Expecting, name, label, or number, got \'{0}\''.format(imm_token.value))
 
                 inst = 0 | (primary_opcode << 26) | (regno_s << 20) | (regno_t << 14) | (imm & 0B00000000000000000011111111111111)
 
@@ -192,17 +229,5 @@ def generate(tokens):
 
         current += len(group)
 
-    print('[{0}..{1}] : deaddead;'.format(hex_str(current), hex_str(16384)))
+    print('[{0}..{1}] : deaddead;'.format(hex_str(current), hex_str(16383)))
     print('END;')
-
-
-
-
-
-
-
-
-
-
-
-

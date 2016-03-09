@@ -95,10 +95,15 @@ class Token(object):
         self.value = value
         self.tokens = tokens
         self.token_types = []
+        self.attributes = {}
 
 
     def add_type(self, token_type):
         self.token_types.append(token_type)
+
+
+    def add_attribute(self, key, value):
+        self.attributes[key] = value
 
 
     def is_type(self, token_type):
@@ -256,19 +261,36 @@ def parse_label_def(text):
     return token
 
 
+def create_privelidged_jump(reg_text, imm_reg_text):
+    if not re.match('^(R[6-9]|R1[1-5])$', reg_text):
+        raise ParseException('Unrecognized system register \'{0}\''.format(reg_text))
+
+    op_token = Token('JAL')
+    op_token.add_type(OP_JAL)
+    reg_token = Token(int(reg_text[1:]))
+    reg_token.add_type(REG)
+    imm_reg_token = parse_imm_reg(imm_reg_text)
+    inst_token = Token(None, (op_token, reg_token, imm_reg_token))
+    inst_token.add_type(INST_JUMP)
+    inst_token.add_type(INST)
+    return inst_token
+
+
 def parse_pseudo(text):
     split = split_on_spaces(text)
     op = split[0]
+
+    if PS_RET.match(text):
+        return create_privelidged_jump('R6', '0(RA)')
+    
     args = split[1].split(',')
 
     if PS_NOT.match(text):
         instruction = 'NAND {0},{1},{1}'.format(args[0], args[1])
     elif PS_CALL.match(text):
         instruction = 'JAL RA,{0}'.format(args[0])
-    elif PS_RET.match(text):
-        instruction = 'JAL R6,0(RA)'
     elif PS_JMP.match(text):
-        instruction = 'JAL R6,{0}'.format(args[0])
+        return create_privelidged_jump('R6', args[0])
     elif PS_BGT.match(text):
         instruction = 'BGT {0},{1},{2}'.format(args[1], args[0], args[2])
     elif PS_BGE.match(text):
@@ -283,7 +305,6 @@ def parse_pseudo(text):
         instruction = 'ADDI {0},{1},{2}'.format(args[0], args[1], '-' + args[2])
     else:
         raise ParseException('Pseudo parse failure')
-
 
     return parse_instruction(instruction)
 
@@ -357,14 +378,19 @@ def parse_instruction(text):
     return token
 
 
-def parse_line(text):
+def parse_line(text, line_num):
     if INST.match(text):
-        return parse_instruction(text)
+        token = parse_instruction(text)
     elif PSUEDO.match(text):
-        return parse_pseudo(text)
+        token = parse_pseudo(text)
     elif LABEL_DEF.match(text):
-        return parse_label_def(text)
+        token = parse_label_def(text)
     elif DIR.match(text):
-        return parse_dir(text)
+        token = parse_dir(text)
     else:
         raise ParseException('Unrecognized statement \'{0}\''.format(text))
+
+    token.add_attribute('line_num', line_num)
+    token.add_attribute('text', text)
+
+    return token

@@ -36,9 +36,9 @@ def main():
                 sanitized = sanitize_line(line)
 
                 if sanitized:
-                    tokens.append(parse.parse_line(sanitized))
+                    tokens.append(parse.parse_line(sanitized, line_num))
             except parse.ParseException as e:
-                raise parse.ParseException('Error at line number {0}: {1}, {2}'.format(line_num, line, str(e)))
+                raise parse.ParseException('Error at line number {0}: {1}, {2}'.format(line_num, line.strip(), str(e)))
 
             line_num += 1
 
@@ -49,4 +49,14 @@ if __name__ == '__main__':
     try:
         main()
     except parse.ParseException as e:
-        print('ERROR: {0}'.format(str(e)))
+        print('Error: {0}'.format(str(e)))
+    except generate.UndefinedSymbolException as e:
+        line_num = e.token.attributes.get('line_num')
+        text = e.token.attributes.get('text')
+        print('Undefined error at line {0}: {1}'.format(line_num, text))
+        print(str(e))
+    except generate.SemanticException as e:
+        line_num = e.token.attributes.get('line_num')
+        text = e.token.attributes.get('text')
+        print('Semantic error at line {0}: {1}'.format(line_num, text))
+        print(str(e))
