@@ -19,10 +19,13 @@ module Project(
 	parameter IMMBITS = 14;
 	parameter FUNCBITS = 4;
 	parameter STARTPC = 32'h100;
+	
+	// I/O
 	parameter ADDRHEX = 32'hFFFFF000;
 	parameter ADDRLEDR = 32'hFFFFF020;
 	parameter ADDRKEY = 32'hFFFFF080;
 	parameter ADDRSW = 32'hFFFFF090;
+	
 	parameter INITFILE = "Test2.mif"; // Change this to Serter2.mif before submitting
 	parameter IMEMADDRBITS = 16;
 	parameter IMEMWORDBITS = 2;
@@ -87,6 +90,17 @@ module Project(
 	);
 
 	wire reset = !locked;
+	
+	/* I/O creation */
+	reg [(DBITS - 1):-] HEXout, LEDRout, KEYout, SWout;
+	assign LEDR = LEDRout[9:0];
+	
+	//idkidk pandapandapanda
+	SevenSeg Hex0Out(.hexNumIn(HEXout[3:0]), .displayOut(HEX0));
+	SevenSeg Hex1Out(.hexNumIn(HEXout[7:4]), .displayOut(HEX1));
+	SevenSeg Hex2Out(.hexNumIn(HEXout[11:8]), .displayOut(HEX2));
+	SevenSeg Hex3Out(.hexNumIn(HEXout[15:12]), .displayOut(HEX3));
+
 
   /* bus creation */
 	tri [(DBITS-1):0] thebus;
