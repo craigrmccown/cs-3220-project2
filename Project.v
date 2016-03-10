@@ -23,7 +23,7 @@ module Project(
 	parameter ADDRLEDR = 32'hFFFFF020;
 	parameter ADDRKEY = 32'hFFFFF080;
 	parameter ADDRSW = 32'hFFFFF090;
-	parameter IMEMINITFILE = "Test2.mif"; // Change this to Serter2.mif before submitting
+	parameter INITFILE = "Test2.mif"; // Change this to Serter2.mif before submitting
 	parameter IMEMADDRBITS = 16;
 	parameter IMEMWORDBITS = 2;
 	parameter IMEMWORDS = (1 << (IMEMADDRBITS - IMEMWORDBITS));
@@ -95,10 +95,10 @@ module Project(
   /* pc creation */
 	reg [(DBITS-1):0] PC;
 	reg LdPC, DrPC, IncPC;
-
-    initial begin
-        PC <= {(DBITS - 9){1'b0}, 9'h100};
-    end
+	
+	initial begin
+		PC <= {(DBITS - 9){1'b0}, 9'h100};
+	end
 
 	always @(posedge clk or posedge reset) begin
 		if (reset) begin
@@ -113,7 +113,7 @@ module Project(
 	assign thebus = DrPC ? PC : BUSZ;
 
 	/* instruction memory creation */
-	(* ram_init_file = IMEMINITFILE *)
+	(* ram_init_file = INITFILE *)
 	reg [(DBITS - 1):0] imem[(IMEMWORDS - 1):0];
 	wire [(DBITS - 1):0] iMemOut = imem[PC[(IMEMADDRBITS - 1):IMEMWORDBITS]];
 
@@ -147,34 +147,36 @@ module Project(
 	assign op2func = op2[(FUNCBITS - 1):0];
 	assign imm = IR[(INSTBITS - OP1BITS - (REGNOBITS * 2) - 1):0];
 	
-    /* create sxt offset */
+   /* create sxt offset */
 	(.IBITS(IMMBITS), .OBITS(DBITS)) #SXT(imm, immsxt);
-    reg ShOff, DrOff;
-    assign immsxt = ShOff ? (immsxt << 2) : BUSZ;
-    assign thebus = DrOff ? immsxt : BUSZ;
+	reg ShOff, DrOff;
+	assign immsxt = ShOff ? (immsxt << 2) : BUSZ;
+	assign thebus = DrOff ? immsxt : BUSZ;
   
-    /* create dmem */
-	reg [(DBITS - 1):0] dmem[0:1023];
+   /* create dmem */
+	(* ram_init_file = INITFILE *)
+	reg [(DBITS - 1):0] dmem[(DMEMWORDS - 1):0];
 	reg [(DBITS - 1):0] MDR, MAR;
-    reg WrMem, LdMAR, DrMem;
-
+	reg WrMem, LdMAR, DrMem;
+	wire [(DBITS - 1):0] dMemOut = WrMem ? BUSZ : MDR;
+	
 	initial begin
-        assign MAR = {(DBITS - 1){1'b0}, 1'b1};
-    end
+		assign MAR = {(DBITS - 1){1'b0}, 1'b1};
+	end
 	
 	always @(posedge clk) begin
-        MDR <= dmem[MAR]
-
-        if (WrMem && !reset) begin
-            dmem[MAR] <= thebus;
-        end
-
+		MDR <= dmem[MAR]
+		
+		if (WrMem && !reset) begin
+			dmem[MAR] <= thebus;
+		end
+		
 		if (LdMAR && !reset) begin
-            MAR <= thebus;
-        end
+			MAR <= thebus;
+		end
 	end
 
-	assign thebus = DrMem ? MDR : BUSZ;
+	assign thebus = DrMem ? dMemOut : BUSZ;
   
     /* create register file */
 	reg [(DBITS - 1):0] regs[63:0];
@@ -187,8 +189,9 @@ module Project(
 		end
 	end
 
-	wire [(DBITS-1):0] regout = WrReg ? {DBITS{1'bX}} : regs[regno];
-	assign thebus = DrReg ? regout : BUSZ;
+	//wire [(DBITS-1):0] regOut = WrReg ? {DBITS{1'bX}} : regs[regno];
+	wire [(DBITS-1):0] regOut = WrReg ? BUSZ : regs[regno];
+	assign thebus = DrReg ? regOut : BUSZ;
   
 	/* create ALU registers */
 	reg signed [(DBITS-1):0] A, B;
@@ -211,7 +214,7 @@ module Project(
 	
 	/* connect ALU output to the bus */
 	reg signed [(DBITS-1):0] ALUout;
-	assign thebus = DrALU ? ALUout : BUSZ;
+	assign thebus = DrALU ? ALUout : b;
 	
 	/* grab ALU func bits */
 	wire [(FUNCBITS - 1):0] func;
@@ -303,65 +306,80 @@ module Project(
 				{LdA, LdB, regno, DrReg} = {1'b1, 1'b1, rs, 1'b1};
 			end
 			S_ALUI1: begin
-				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, ALUI2};
+				{LdB, ShOff, DrOff} = {1'b1, 1'b1, 1'b1};
+				next_state = ALUI2;
 			end
 			S_ALUI2: begin
-				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rt, 1'b1, S_FETCH1};
+				{ALUfunc, DrALU, regno, WrReg} = {op2func, 1'b1, rt, 1'b1};
+				next_state = S_FETCH1;
 			end
 			S_ALUR1: begin
-				{LdB, regno, DrReg, next_state} = {1'b1, rt, 1'b1, ALUR2};
+				{LdB, regno, DrReg} = {1'b1, rt, 1'b1};
+				next_state = ALUR2;
 			end
 			S_ALUR2: begin
-				{ALUfunc, DrALU, regno, WrReg, next_state} = {op2func, 1'b1, rd, 1'b1, S_FETCH1};
+				{ALUfunc, DrALU, regno, WrReg} = {op2func, 1'b1, rd, 1'b1};
+				next_state = S_FETCH1;
 			end
 			S_JALR1: begin
-				{regno, WrReg, DrPC, next_state} = {rt, 1'b1, 1'b1, S_JALR2};
+				{regno, WrReg, DrPC} = {rt, 1'b1, 1'b1};
+				next_state = S_JALR2;
 			end
 			S_JAL2 begin
-				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_JAL3};
+				{LdB, ShOff, DrOff} = {1'b1, 1'b1, 1'b1};
+				next_state = S_JAL3;
 			end
 			S_JAL3 begin
-				{ALUfunc, DrALU, LdPC, next_state} = {FUNC_ADD, 1'b1, 1'b1, S_FETCH1};
+				{ALUfunc, DrALU, LdPC} = {FUNC_ADD, 1'b1, 1'b1};
+				next_state = S_FETCH1;
 			end
 			S_B1: begin
-				{LdB, regno, DrReg, next_state} = {1'b1, rt, 1'b1, S_B2};
+				{LdB, regno, DrReg} = {1'b1, rt, 1'b1};
+				next_state = S_B2;
 			end
 			S_B2: begin
 				{ALUfunc, DrALU} = {op1func, 1'b1};
-
-                // move to next state?
-				if (!thebus[0]) begin
+				if (!ALUout) begin
 					next_state = S_FETCH1;
-                end else begin
-                    next_state = S_B3;
-                end
+				end else begin
+					next_state = S_B3;
+				end
 			end
 			S_B3: begin
-				{LdA, DrPC, next_state} = {1'b1, 1'b1, S_B4};
+				{LdA, DrPC} = {1'b1, 1'b1};
+				next_state = S_B4;
 			end
 			S_B4: begin
-				{LdB, ShOff, DrOff, next_state} = {1'b1, 1'b1, 1'b1, S_B5};
+				{LdB, ShOff, DrOff} = {1'b1, 1'b1, 1'b1};
+				next_state = S_B5;
 			end
 			S_B5: begin
-				{LdPC, ALUfunc, DrALU, next_state} = {1'b1, op1func, 1'b1, S_FETCH1};
+				{LdPC, ALUfunc, DrALU} = {1'b1, op1func, 1'b1};
+				next_state = S_FETCH1;
 			end
 			S_S1: begin
-				{LdB, DrOff, next_state} = {1'b1, 1'b1, S_S2}; 
+				{LdB, DrOff} = {1'b1, 1'b1}; 
+				next_state = S_S2;
 			end
 			S_S2: begin
-				{ALUfunc, DrALU, LdMAR, next_state} = {op1func, 1'b1, 1'b1, S_S3};
+				{ALUfunc, DrALU, LdMAR} = {op1func, 1'b1, 1'b1};
+				next_state = S_S3;
 			end
 			S_S3: begin
-				{regno, WrMem, DrReg, next_state} = {rt, 1'b1, 1'b1, S_FETCH1};
+				{regno, WrMem, DrReg} = {rt, 1'b1, 1'b1};
+				next_state = S_FETCH1;
 			end
 			S_L1: begin
-				{LdB, DrOff, next_state} = {1'b1, 1'b1, S_L2}; 
+				{LdB, DrOff} = {1'b1, 1'b1}; 
+				next_state = S_L2;
 			end
 			S_L2: begin
-				{ALUfunc, DrALU, LdMAR, next_state} = {op1func, 1'b1, 1'b1, S_L3};
+				{ALUfunc, DrALU, LdMAR} = {op1func, 1'b1, 1'b1};
+				next_state = S_L3;
 			end
 			S_L3: begin
-				{DrMem, regno, WrReg, next_state} = {1'b1, rt, 1'b1, S_FETCH1};
+				{DrMem, regno, WrReg} = {1'b1, rt, 1'b1};
+				next_state = S_FETCH1;
 			default: next_state=S_ERROR;
 		endcase
 	end
