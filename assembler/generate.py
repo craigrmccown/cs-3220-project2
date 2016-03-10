@@ -110,7 +110,7 @@ def first_pass(tokens):
 
     for token in tokens:
         if token.is_type(parse.LABEL_DEF):
-            labels[token.value] = current_index - 1
+            labels[token.value] = current_index
         elif token.is_type(parse.DIR_NAME):
             names[token.tokens[0].value] = token.tokens[1].value
         elif token.is_type(parse.DIR_ORIG):
@@ -119,7 +119,7 @@ def first_pass(tokens):
             if token.value < current_index:
                 raise SemanticException(token, 'Cannot set ORIG to a previous location')
         else:
-            current_index += 1
+            current_index += 4
 
 
 def second_pass(tokens):
@@ -127,7 +127,7 @@ def second_pass(tokens):
 
     for token in tokens:
         if token.is_type(parse.DIR_ORIG):
-            for i in range(token.value - len(instructions)):
+            for i in range(int((token.value - len(instructions) * 4) / 4)): # each 0xDEADDEAD adds 4 bytes
                 instructions.append(0xDEADDEAD)
         elif token.is_type(parse.DIR_WORD):
             instructions.append(lookup_name(token, token.value))
@@ -147,16 +147,20 @@ def second_pass(tokens):
                     regno_t = token.tokens[1].value
                     regno_s = token.tokens[2].tokens[1].value
                     imm_token = token.tokens[2].tokens[0]
-                elif token.is_type(parse.INST_BRANCH) or token.is_type(parse.INST_FUNCI):
+                elif token.is_type(parse.INST_FUNCI):
                     regno_t = token.tokens[1].value
                     regno_s = token.tokens[2].value
+                    imm_token = token.tokens[3]
+                elif token.is_type(parse.INST_BRANCH):
+                    regno_t = token.tokens[2].value
+                    regno_s = token.tokens[1].value
                     imm_token = token.tokens[3]
                 else:
                     raise Exception('Unrecognized instruction type')
 
                 if token.is_type(parse.INST_BRANCH):
                     if imm_token.is_type(parse.IDENTIFIER):
-                        imm = lookup_label(token, imm_token.value)
+                        imm = int(lookup_label(token, imm_token.value) / 4) - len(instructions) - 1 # PC = PC + 4 + (imm * 4)
                     else:
                         raise SemanticException(token, 'Expecting label, got \'{0}\''.format(imm_token.value))
                 elif token.is_type(parse.INST_STORE):
@@ -166,10 +170,17 @@ def second_pass(tokens):
                         imm = imm_token.value
                     else:
                         raise SemanticException(token, 'Expecting name or number, got \'{0}\''.format(imm_token.value))
+                elif token.is_type(parse.INST_JUMP):
+                    if imm_token.is_type(parse.IDENTIFIER):
+                        imm = int(lookup_label(token, imm_token.value) / 4) # PC = rs + (imm * 4)
+                    elif imm_token.is_type(parse.NUMBER):
+                        imm = imm_token.value
+                    else:
+                        raise SemanticException(token, 'Expecting label or number, got \'{0}\''.format(imm_token.value))
                 else:
                     if imm_token.is_type(parse.IDENTIFIER):
                         if labels.get(imm_token.value):
-                            imm = labels.get(imm_token.value) - len(instructions)
+                            imm = labels.get(imm_token.value) # Get actual memory address for LW and FUNCI
                         elif names.get(imm_token.value):
                             imm = names.get(imm_token.value)
                         else:
@@ -224,10 +235,10 @@ def generate(tokens):
     for group in groups:
         if len(group) == 1:
             print('{0} : {1};'.format(hex_str(current), hex_str(group[0])))
+            current += 1
         else:
-            print('[{0}..{1}] : {2};'.format(hex_str(current), hex_str(current + len(group)), hex_str(group[0])))
-
-        current += len(group)
+            print('[{0}..{1}] : {2};'.format(hex_str(current), hex_str(current + len(group) - 1), hex_str(group[0])))
+            current += len(group)
 
     print('[{0}..{1}] : deaddead;'.format(hex_str(current), hex_str(16383)))
     print('END;')

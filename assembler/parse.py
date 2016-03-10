@@ -131,7 +131,7 @@ def parse_hex_digit(c):
         return ord(c) - ord('A') + 10
 
 
-def parse_hex(text):
+def parse_hex_number(text):
     c = text[-1]
     num = 0
     digit = 0
@@ -141,6 +141,11 @@ def parse_hex(text):
         digit += 1
         c = text[-1 * digit - 1]
 
+    return num
+
+
+def parse_hex(text):
+    num = parse_hex_number(text)
     token = Token(num)
     token.add_type(HEX)
     return token
